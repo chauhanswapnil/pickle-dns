@@ -1,31 +1,39 @@
 use crate::packet::parser::DnsPacketParser;
+use env_logger;
+use log::{debug, error};
 use std::io;
 use tokio::net::UdpSocket;
-use tokio::time::{timeout, Duration};
 
+pub mod helpers;
 pub mod packet;
+
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    env_logger::Builder::new()
+        .filter_level(log::LevelFilter::Trace)
+        .init();
+
     let sock = UdpSocket::bind("127.0.0.1:53").await?;
-    const MAX_UDP_PACKET_SIZE: usize = 512;
-    let mut buf = [0; MAX_UDP_PACKET_SIZE];
+    let mut buf = [0; DnsPacketParser::MAX_DNS_PACKET_SIZE];
     loop {
-        match timeout(Duration::from_secs(5), sock.recv_from(&mut buf)).await {
-            Ok(Ok((len, addr))) => {
-                println!("{:?} bytes received from {:?}", len, addr);
+        match sock.recv_from(&mut buf).await {
+            Ok((len, addr)) => {
+                debug!("{:?} bytes received from {:?}\n", len, addr);
                 let packet = &buf[..len];
 
-                DnsPacketParser.parse(packet);
-
-                // Sending a basic echo response for now
-                let len = sock.send_to(&buf[..len], addr).await?;
-                println!("{:?} bytes sent", len);
+                match DnsPacketParser.parse(packet) {
+                    Ok(dns_message) => {
+                        debug!("{:?}\n\n", dns_message);
+                        let len = sock.send_to(&buf[..len], addr).await?;
+                        debug!("{:?} bytes sent to {:?}\n", len, addr);
+                    }
+                    Err(e) => {
+                        error!("Error parsing DNS packet from {:?}: {:?}", addr, e);
+                    }
+                }
             }
-            Ok(Err(e)) => {
-                eprintln!("Error receiving data: {:?}", e);
-            }
-            Err(_) => {
-                eprintln!("Timeout waiting for data");
+            Err(e) => {
+                error!("Error receiving data: {:?}", e);
             }
         }
     }

@@ -1,5 +1,5 @@
 use crate::packet::parser::DnsPacketParser;
-use env_logger;
+
 use log::{debug, error};
 use std::io;
 use tokio::net::UdpSocket;

@@ -156,21 +156,21 @@ pub(crate) struct DnsHeader {
     /// generates any kind of query.  This identifier is copied
     /// the corresponding reply and can be used by the requester
     /// to match up replies to outstanding queries.
-    transaction_id: u16,
+    pub(crate) transaction_id: u16,
     /// 16 bits containing various flags
-    flags: Flags,
+    pub(crate) flags: Flags,
     /// An unsigned 16 bit integer specifying the number of
     /// entries in the question section.
-    question_count: QuestionCount,
+    pub(crate) question_count: QuestionCount,
     /// An unsigned 16 bit integer specifying the number of
     /// resource records in the answer section.
-    answer_count: AnswerCount,
+    pub(crate) answer_count: AnswerCount,
     /// An unsigned 16 bit integer specifying the number of name
     /// server resource records in the authority records section.
-    authority_count: AuthorityCount,
+    pub(crate) authority_count: AuthorityCount,
     /// An unsigned 16 bit integer specifying the number of
     /// resource records in the additional records section.
-    additional_count: AdditionalCount,
+    pub(crate) additional_count: AdditionalCount,
 }
 
 #[derive(Debug)]

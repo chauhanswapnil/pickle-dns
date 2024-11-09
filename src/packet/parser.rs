@@ -1,3 +1,4 @@
+use super::body::{DnsPacketBodyParser, DnsQuestion};
 use super::header::DnsHeader;
 use std::fmt;
 
@@ -21,6 +22,7 @@ pub(crate) struct DnsMessage {
         +---------------------+
      */
     header: DnsHeader,
+    question: Vec<DnsQuestion>,
     body: Vec<u8>,
 }
 
@@ -39,8 +41,18 @@ impl DnsPacketParser {
     pub const MAX_DNS_PACKET_SIZE: usize = 512;
 
     pub fn parse(&self, packet_buffer: &[u8]) -> Result<DnsMessage, ()> {
-        let (header_raw, body_raw) = packet_buffer.split_at(12);
-        let header = DnsHeader::from_bytes(header_raw).unwrap();
+        let (raw_header, raw_body) = packet_buffer.split_at(12);
+        let header = DnsHeader::from_bytes(raw_header).unwrap();
+
+        let body_parser = DnsPacketBodyParser::new(raw_body);
+
+        // parse question
+        let mut dns_questions = vec![];
+        for _ in 0..header.question_count {
+            let question = body_parser.parse_question();
+            dns_questions.push(question);
+        }
+
         Ok(DnsMessage {
             header,
             body: body_raw.to_vec(),

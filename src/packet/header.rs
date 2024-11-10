@@ -2,7 +2,10 @@
 
 use log::debug;
 
-use crate::helpers;
+use crate::errors::HeaderParseError;
+use crate::errors::ParseError;
+use crate::helpers::bytes_to_hex;
+use crate::helpers::bytes_to_u16_array;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum DnsOpcode {
@@ -122,14 +125,10 @@ impl Flags {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct QuestionCount(u16);
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct AnswerCount(u16);
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct AuthorityCount(u16);
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct AdditionalCount(u16);
+type QuestionCount = u16;
+type AnswerCount = u16;
+type AuthorityCount = u16;
+type AdditionalCount = u16;
 
 /*
 The header contains the following fields:
@@ -173,40 +172,19 @@ pub(crate) struct DnsHeader {
     pub(crate) additional_count: AdditionalCount,
 }
 
-#[derive(Debug)]
-pub enum HeaderParseError {
-    InvalidOpcode,
-    InvalidRcode,
-    InvalidPacketLength,
-    InvalidLength,
-}
-
 impl DnsHeader {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, HeaderParseError> {
-        debug!("\n Header as hex:\n{:?}\n", helpers::bytes_to_hex(bytes));
-        let u16_values = Self::bytes_to_u16_array(bytes)?;
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParseError> {
+        debug!("\n Header as hex:\n{:?}\n", bytes_to_hex(bytes));
+        let u16_values = bytes_to_u16_array(bytes)?;
 
         Ok(DnsHeader {
             transaction_id: u16_values[0],
             flags: Flags::from_u16(u16_values[1])?,
-            question_count: QuestionCount(u16_values[2]),
-            answer_count: AnswerCount(u16_values[3]),
-            authority_count: AuthorityCount(u16_values[4]),
-            additional_count: AdditionalCount(u16_values[5]),
+            question_count: u16_values[2],
+            answer_count: u16_values[3],
+            authority_count: u16_values[4],
+            additional_count: u16_values[5],
         })
-    }
-
-    fn bytes_to_u16_array(bytes: &[u8]) -> Result<Vec<u16>, HeaderParseError> {
-        if bytes.len() % 2 != 0 || bytes.len() < 2 {
-            return Err(HeaderParseError::InvalidLength);
-        }
-        let mut u16_array = Vec::with_capacity(bytes.len() / 2);
-
-        for chunk in bytes.chunks(2) {
-            let value = u16::from_be_bytes([chunk[0], chunk[1]]);
-            u16_array.push(value);
-        }
-        Ok(u16_array)
     }
 }
 
@@ -382,10 +360,10 @@ mod tests {
         assert_eq!(header.transaction_id, 0x1234);
         assert!(!header.flags.is_response);
         assert_eq!(header.flags.opcode, DnsOpcode::Query);
-        assert_eq!(header.question_count, QuestionCount(1));
-        assert_eq!(header.answer_count, AnswerCount(1));
-        assert_eq!(header.authority_count, AuthorityCount(0));
-        assert_eq!(header.additional_count, AdditionalCount(0));
+        assert_eq!(header.question_count, 1);
+        assert_eq!(header.answer_count, 1);
+        assert_eq!(header.authority_count, 0);
+        assert_eq!(header.additional_count, 0);
     }
 
     #[test]
@@ -400,12 +378,12 @@ mod tests {
     #[test]
     fn test_bytes_to_u16_array() {
         let bytes: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
-        let result = DnsHeader::bytes_to_u16_array(&bytes).unwrap();
+        let result = bytes_to_u16_array(&bytes).unwrap();
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], 0x1234);
         assert_eq!(result[1], 0x5678);
 
         let invalid_bytes: [u8; 3] = [0x12, 0x34, 0x56]; // Invalid length
-        assert!(DnsHeader::bytes_to_u16_array(&invalid_bytes).is_err());
+        assert!(bytes_to_u16_array(&invalid_bytes).is_err());
     }
 }

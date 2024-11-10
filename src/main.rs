@@ -4,6 +4,7 @@ use log::{debug, error};
 use std::io;
 use tokio::net::UdpSocket;
 
+pub mod errors;
 pub mod helpers;
 pub mod packet;
 

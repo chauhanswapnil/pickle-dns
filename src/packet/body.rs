@@ -6,7 +6,7 @@ use crate::helpers::bytes_to_hex;
 use crate::helpers::bytes_to_u16_array;
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum DnsType {
     /// a host address record
     A = 1,
@@ -45,7 +45,7 @@ impl DnsType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum DnsClass {
     /// internet
     IN = 1,
@@ -73,7 +73,7 @@ impl DnsClass {
     |                     QCLASS                    |
     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 */
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(crate) struct DnsQuestion {
     /// a domain name represented as a sequence of labels, where
@@ -166,5 +166,37 @@ impl<'a> DnsPacketBodyParser<'a> {
             question_type: DnsType::from_u16(u16_values[0])?,
             question_class: DnsClass::from_u16(u16_values[1])?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basic_valid_question() {
+        let raw_body = [
+            14, 115, 119, 97, 112, 110, 105, 108, 99, 104, 97, 117, 104, 97, 110, 3, 99, 111, 109,
+            0, 0, 1, 0, 1, 0, 0, 41, 16, 0, 0, 0, 0, 0, 0, 0,
+        ];
+
+        let mut body_parser = DnsPacketBodyParser::new(&raw_body);
+        let question = body_parser.parse_question().unwrap();
+        assert_eq!(question.question_type, DnsType::A);
+        assert_eq!(question.question_class, DnsClass::IN);
+        assert_eq!(question.name, "swapnilchauhan.com");
+        assert_eq!(body_parser.cursor, 24);
+    }
+
+    #[test]
+    fn test_bytes_to_u16_array() {
+        let bytes: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
+        let result = bytes_to_u16_array(&bytes).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], 0x1234);
+        assert_eq!(result[1], 0x5678);
+
+        let invalid_bytes: [u8; 3] = [0x12, 0x34, 0x56]; // Invalid length
+        assert!(bytes_to_u16_array(&invalid_bytes).is_err());
     }
 }

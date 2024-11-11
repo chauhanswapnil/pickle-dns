@@ -1,3 +1,5 @@
+use log::debug;
+
 use crate::errors::ParseError;
 
 use super::body::{DnsPacketBodyParser, DnsQuestion};
@@ -46,7 +48,7 @@ impl DnsPacketParser {
     pub fn parse(&self, packet_buffer: &[u8]) -> Result<DnsMessage, ParseError> {
         let (raw_header, raw_body) = packet_buffer.split_at(12);
         let header = DnsHeader::from_bytes(raw_header).unwrap();
-
+        debug!("Raw Body: {:?}", raw_body);
         let mut body_parser = DnsPacketBodyParser::new(raw_body);
 
         // parse question

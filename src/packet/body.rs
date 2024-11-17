@@ -4,6 +4,8 @@ use crate::errors::ParseError;
 use crate::errors::QuestionParseError;
 use crate::helpers::bytes_to_hex;
 use crate::helpers::bytes_to_u16_array;
+use std::net::{Ipv4Addr, Ipv6Addr};
+use std::usize;
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -41,6 +43,12 @@ impl DnsType {
             12 => Ok(DnsType::PTR),
             41 => Ok(DnsType::OPT),
             _ => Err(QuestionParseError::UnsupportedType),
+        }
+    }
+    pub fn from(value: &DnsRecordData) -> Self {
+        match value {
+            DnsRecordData::A(_) => DnsType::A,
+            DnsRecordData::AAAA(_) => DnsType::AAAA,
         }
     }
 }
@@ -87,6 +95,61 @@ pub(crate) struct DnsQuestion {
     question_type: DnsType,
     /// a two octet code that specifies the class of the query.
     question_class: DnsClass,
+}
+
+type RecordTTL = u32;
+type RecordDataLength = u16;
+
+/*
+                                    1  1  1  1  1  1
+      0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    |                                               |
+    /                                               /
+    /                      NAME                     /
+    |                                               |
+    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    |                      TYPE                     |
+    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    |                     CLASS                     |
+    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    |                      TTL                      |
+    |                                               |
+    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    |                   RDLENGTH                    |
+    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--|
+    /                     RDATA                     /
+    /                                               /
+    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+*/
+#[derive(Debug, PartialEq, Eq)]
+#[allow(dead_code)]
+pub(crate) struct DnsResourceRecord {
+    /// the name of the node to which this resource record pertains.
+    name: String,
+    /// two octets containing one of the RR TYPE codes.
+    record_type: DnsType,
+    /// two octets containing one of the RR CLASS codes.
+    record_class: DnsClass,
+    /// a 32 bit signed integer that specifies the time interval
+    /// that the resource record may be cached before the source
+    /// of the information should again be consulted.  Zero
+    /// values are interpreted to mean that the RR can only be
+    /// used for the transaction in progress, and should not be
+    /// cached.  For example, SOA records are always distributed
+    /// with a zero TTL to prohibit caching.  Zero values can
+    /// also be used for extremely volatile data
+    record_ttl: RecordTTL,
+    /// an unsigned 16 bit integer that specifies the length in octets
+    record_rdlength: RecordDataLength,
+    /// a variable length string of octets that describes the resource.
+    record_rdata: DnsRecordData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DnsRecordData {
+    A(Ipv4Addr),
+    AAAA(Ipv6Addr),
 }
 
 pub(crate) struct DnsPacketBodyParser<'a> {
@@ -165,6 +228,57 @@ impl<'a> DnsPacketBodyParser<'a> {
             name,
             question_type: DnsType::from_u16(u16_values[0])?,
             question_class: DnsClass::from_u16(u16_values[1])?,
+        })
+    }
+
+    fn parse_ipv4(&mut self, raw_record_data: &[u8]) -> u32 {
+        if raw_record_data.len() != 4 {
+            panic!("Should never happen!");
+        }
+        // Combine four u8 values into a single u32
+        let ip_as_u32: u32 = ((raw_record_data[0] as u32) << 24)
+            | ((raw_record_data[1] as u32) << 16)
+            | ((raw_record_data[2] as u32) << 8)
+            | (raw_record_data[3] as u32);
+        return ip_as_u32;
+    }
+
+    pub fn parse_resource_record(&mut self) -> Result<DnsResourceRecord, ParseError> {
+        // Parse the name first, which will move the cursor past the name section
+        let name = self.parse_name()?;
+        // Parse the next 4 bytes as type and class
+        let u16_values = bytes_to_u16_array(&self.raw_body[self.cursor..self.cursor + 4])?;
+        self.cursor += 4;
+        let record_type = DnsType::from_u16(u16_values[0])?;
+        let record_class = DnsClass::from_u16(u16_values[1])?;
+
+        // Parse the next 4 bytes as TTL
+        let ttl_bytes = bytes_to_u16_array(&self.raw_body[self.cursor..self.cursor + 4])?;
+        let record_ttl: RecordTTL = (ttl_bytes[0] as u32) << 16 | (ttl_bytes[1] as u32);
+        self.cursor += 4;
+        // Parse the next 2 bytes as Record Data Length
+        let record_rdlength_bytes =
+            bytes_to_u16_array(&self.raw_body[self.cursor..self.cursor + 2])?;
+        self.cursor += 2;
+        let record_rdlength: RecordDataLength = record_rdlength_bytes[0];
+        // rest is record data
+        let raw_record_data =
+            &self.raw_body[self.cursor..self.cursor + usize::from(record_rdlength)];
+        self.cursor += usize::from(record_rdlength);
+
+        // parse according to record type
+        let record_rdata = match record_type {
+            DnsType::A => DnsRecordData::A(Ipv4Addr::from(self.parse_ipv4(raw_record_data))),
+            _ => todo!("Unhandled record type {record_type:?}"),
+        };
+
+        Ok(DnsResourceRecord {
+            name,
+            record_type,
+            record_class,
+            record_ttl,
+            record_rdlength,
+            record_rdata,
         })
     }
 }

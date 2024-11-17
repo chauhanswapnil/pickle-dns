@@ -51,11 +51,11 @@ impl DnsResponseCode {
 pub(crate) struct Flags {
     /// A one bit field that specifies whether this message is a
     /// query (0), or a response (1).
-    is_response: bool,
+    pub(crate) is_response: bool,
     /// A four bit field that specifies kind of query in this
     /// message.  This value is set by the originator of a query
     /// and copied into the response.
-    opcode: DnsOpcode,
+    pub(crate) opcode: DnsOpcode,
     /// Authoritative Answer - this bit is valid in responses,
     /// and specifies that the responding name server is an
     /// authority for the domain name in question section.
@@ -63,22 +63,22 @@ pub(crate) struct Flags {
     /// multiple owner names because of aliases.  The AA bit
     /// corresponds to the name which matches the query name, or
     /// the first owner name in the answer section.
-    is_authorative_answer: bool,
+    pub(crate) is_authorative_answer: bool,
     /// TrunCation - specifies that this message was truncated
     /// due to length greater than that permitted on the
     /// transmission channel.
-    is_truncated: bool,
+    pub(crate) is_truncated: bool,
     /// Recursion Desired - this bit may be set in a query and
     /// is copied into the response.  If RD is set, it directs
     /// the name server to pursue the query recursively.
     /// Recursive query support is optional.
-    is_recursion_desired: bool,
+    pub(crate) is_recursion_desired: bool,
     /// Recursion Available - this be is set or cleared in a
     /// response, and denotes whether recursive query support is
     /// available in the name server.
-    is_recursion_enabled: bool,
+    pub(crate) is_recursion_enabled: bool,
     /// Response code - this 4 bit field is set as part of responses.
-    response_code: DnsResponseCode,
+    pub(crate) response_code: DnsResponseCode,
 }
 
 impl Flags {
